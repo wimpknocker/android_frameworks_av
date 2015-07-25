@@ -769,11 +769,15 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
 
     status_t err;
     if (mNativeWindow != NULL && portIndex == kPortIndexOutput) {
-        if (storingMetadataInDecodedBuffers()) {
-            err = allocateOutputMetadataBuffers();
-        } else {
-            err = allocateOutputBuffersFromNativeWindow();
-        }
+#ifdef STE_HARDWARE
+    err = allocateOutputBuffersFromNativeWindow();
+#else
+    if (storingMetadataInDecodedBuffers()) {
+        err = allocateOutputMetadataBuffers();
+    } else {
+        err = allocateOutputBuffersFromNativeWindow();
+    }
+#endif
     } else {
         OMX_PARAM_PORTDEFINITIONTYPE def;
         InitOMXParams(&def);
@@ -913,7 +917,11 @@ status_t ACodec::setupNativeWindowSizeFormatAndUsage(
             nativeWindow,
             def.format.video.nFrameWidth,
             def.format.video.nFrameHeight,
+#ifdef STE_HARDWARE
+            OMXCodec::OmxToHALFormat(def.format.video.eColorFormat));
+#else
             def.format.video.eColorFormat,
+#endif
             mRotationDegrees,
             usage);
 }
@@ -1629,6 +1637,15 @@ status_t ACodec::configureCodec(
     sp<AMessage> outputFormat = mNotify->dup(); // will use this for kWhatOutputFormatChanged
 
     mIsEncoder = encoder;
+   /* Meticulus:
+    * Software codecs don't require configuration? Not sure
+    * but skipping configuration for them seems to work.
+    */
+    if(strncmp("OMX.google.h264", mComponentName.c_str(), 15) == 0
+       || strncmp("OMX.ffmpeg.h264", mComponentName.c_str(), 15) == 0){
+	ALOGI("Meticulus: Soft codec %s detected, skipping configureCodec\n", mComponentName.c_str());
+       return OK;
+    }
 
     mInputMetadataType = kMetadataBufferTypeInvalid;
     mOutputMetadataType = kMetadataBufferTypeInvalid;
